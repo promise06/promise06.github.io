@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "RabbitMQ Crash问题"
-date:   2021-04-15 16:07:06 +0800
+date:   2021-04-15 13:07:06 +0800
 categories: rabbitmq otp
 ---
 RabbitMQ 版本：3.6.6
