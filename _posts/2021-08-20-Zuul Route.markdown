@@ -12,13 +12,78 @@ SpringCloud Netflix Core 版本：1.3.x
 前置知识： [RxJava][Reactivex.io]
 
 我把Zuul处理请求简单的分成了3个阶段：
-第一阶段，请求是怎么到达Zuul所在的容器的，说直白点，请求是怎么到达ZuulServlet的
+第一阶段，请求是怎么到达ZuulServlet的
 第二阶段，请求对应的目标服务是怎么被定为到的
 第三阶段，请求是怎么到达目标服务的
 下面我们一个阶段一个阶段的解释。
 
 
 
+第一个阶段：当需要创建一个Zuul 的反向代理时，我们会用到@EnableZuulProxy 这个注解
+
+```java
+
+@EnableCircuitBreaker
+@EnableDiscoveryClient
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Import(ZuulProxyMarkerConfiguration.class)
+public @interface EnableZuulProxy {
+}
+
+```
+在这个注解中需要注意@EnableCircuitBreaker，这个注解指明Zuul反向代理默认启用断路器，@EnableDiscoveryClient这个注解指明默认使用服务发现，@Import(ZuulProxyMarkerConfiguration.class)这个注解是一个配置类的标识，具体的代码如下：
+
+```java
+
+@Configuration
+public class ZuulServerMarkerConfiguration {
+	@Bean
+	public Marker zuulServerMarkerBean() {
+		return new Marker();
+	}
+
+	class Marker {
+	}
+}
+
+```
+一旦这个配置类存在，那么就会使用 ZuulProxyAutoConfiguration 作为Zuul的配置类，这个类继承了 ZuulServerAutoConfiguration并且丰富了配置，增加了新的过滤器,RouteLocator和监听器，如下：
+```java
+	@Bean
+	@ConditionalOnMissingBean(DiscoveryClientRouteLocator.class)
+	public DiscoveryClientRouteLocator discoveryRouteLocator() {
+		return new DiscoveryClientRouteLocator(this.server.getServletPrefix(), this.discovery, this.zuulProperties,
+				this.serviceRouteMapper);
+	}
+
+	// pre filters
+	@Bean
+	public PreDecorationFilter preDecorationFilter(RouteLocator routeLocator, ProxyRequestHelper proxyRequestHelper) {
+		return new PreDecorationFilter(routeLocator, this.server.getServletPrefix(), this.zuulProperties,
+				proxyRequestHelper);
+	}
+
+	// route filters
+	@Bean
+	public RibbonRoutingFilter ribbonRoutingFilter(ProxyRequestHelper helper,
+			RibbonCommandFactory<?> ribbonCommandFactory) {
+		RibbonRoutingFilter filter = new RibbonRoutingFilter(helper, ribbonCommandFactory, this.requestCustomizers);
+		return filter;
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(SimpleHostRoutingFilter.class)
+	public SimpleHostRoutingFilter simpleHostRoutingFilter(ProxyRequestHelper helper, ZuulProperties zuulProperties) {
+		return new SimpleHostRoutingFilter(helper, zuulProperties);
+	}
+
+	@Bean
+	public ApplicationListener<ApplicationEvent> zuulDiscoveryRefreshRoutesListener() {
+		return new ZuulDiscoveryRefreshListener();
+	}
+
+```
 
 
 
