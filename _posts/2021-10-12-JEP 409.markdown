@@ -1,0 +1,51 @@
+---
+layout: post
+title:  "JEP 409: Sealed Classes"
+date:   2021-10-12 15:50:06 +0800
+categories: java jep sealed
+---
+
+写一下关于jep 409 sealed classed 的一些个人理解
+
+这个jep（java enhance proposal）是在java15被提出（jep360），java17正式发布的，它的目的在于限制类的继承。
+因为按照目前java的继承机制来讲，除非一个被设置为final，否则可以被任何类所继承，可以有无数的子类，然后子类又有子类，结果就是类的继承体系越来越复杂，继承的规模也越来越庞大。这样带来的一个问题就是类的管理就会变得越来越难。而被sealed 的修饰符所修饰的类，它只能被所指定的子类继承，前提是子类和父类在同一个module中，如果是匿名module，那么他们就需要在同一个package当中。关于module（JSR376） 在java9中正式被发布出来，以后有时间会写一部分关于module的东西。回到sealed的修饰符，举个简单的例子：
+
+```java
+package java.lang.constant;
+
+public sealed interface ConstantDesc
+    permits String, Integer, Float, Long, Double,
+            ClassDesc, MethodTypeDesc, DynamicConstantDesc { ... }
+
+// ClassDesc is designed for subclassing by JDK classes only
+public sealed interface ClassDesc extends ConstantDesc
+    permits PrimitiveClassDescImpl, ReferenceClassDescImpl { ... }
+final class PrimitiveClassDescImpl implements ClassDesc { ... }
+final class ReferenceClassDescImpl implements ClassDesc { ... } 
+
+// MethodTypeDesc is designed for subclassing by JDK classes only
+public sealed interface MethodTypeDesc extends ConstantDesc
+    permits MethodTypeDescImpl { ... }
+final class MethodTypeDescImpl implements MethodTypeDesc { ... }
+
+// DynamicConstantDesc is designed for subclassing by user code
+public non-sealed abstract class DynamicConstantDesc implements ConstantDesc { ... }
+```
+上述代码来自java.lang.constant package，可以自行参阅。sealed修饰符指定了被限制的类，permits指明了可以继承此类的子类。而被permits所指定的子类可以被sealed，final或者non-sealed所修饰，其中non-sealed是默认的修饰符。除此之外，子类和父类之间的继承关系中不能再有其他的类插入。
+
+从JVM的层面来说，虽然sealed修饰符跟public一样是类的的修饰符，但是在class文件当中并没有对应的ACC_SEALED标识，它实际上是通过PermittedSubclasses 属性来实现的，具体的class文件里的对应的结构如下：
+``` class
+PermittedSubclasses_attribute {
+    u2 attribute_name_index;
+    u4 attribute_length;
+    u2 number_of_classes;
+    u2 classes[number_of_classes];
+}
+```
+
+从JAVA语言层面来讲，这个修饰符带来的影响是java.lang.Class 中增加了两个方法，如下：
+```java
+Class<?>[] getPermittedSubclasses()
+boolean isSealed()
+```
+具体的含义直接从方法名就可以看出来了，就不解读了。
